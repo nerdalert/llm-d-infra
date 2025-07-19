@@ -3,7 +3,9 @@
 
 set -euo pipefail
 
-# Determine OS and architecture
+########################################
+#  Helper: detect current OS / ARCH
+########################################
 OS=$(uname | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
 case "$ARCH" in
@@ -12,7 +14,10 @@ case "$ARCH" in
   *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
-# Helper: install via package manager or brew if available
+########################################
+#  Helper: install a package via the
+#  best available package manager
+########################################
 install_pkg() {
   PKG="$1"
   if [[ "$OS" == "linux" ]]; then
@@ -39,14 +44,18 @@ install_pkg() {
   fi
 }
 
-# Install base utilities
+########################################
+#  Base utilities
+########################################
 for pkg in git jq curl tar wget; do
   if ! command -v "$pkg" &> /dev/null; then
     install_pkg "$pkg"
   fi
 done
 
-# Install yq (v4+)
+########################################
+#  yq (v4+)
+########################################
 if ! command -v yq &> /dev/null; then
   echo "Installing yq..."
   if [[ "$OS" == "linux" ]]; then
@@ -59,11 +68,13 @@ if ! command -v yq &> /dev/null; then
   sudo chmod +x /usr/local/bin/yq
 fi
 
-# Install kubectl
+########################################
+#  kubectl
+########################################
 if ! command -v kubectl &> /dev/null; then
   echo "Installing kubectl..."
-  K8S_URL="https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)"
-  curl -LO "${K8S_URL}/bin/${OS}/${ARCH}/kubectl"
+  K8S_URL="https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)"
+  curl -sLO "${K8S_URL}/bin/${OS}/${ARCH}/kubectl"
   if [[ "$OS" == "darwin" ]]; then
     sudo install -m 0755 kubectl /usr/local/bin/kubectl
   else
@@ -72,31 +83,49 @@ if ! command -v kubectl &> /dev/null; then
   rm kubectl
 fi
 
-# Install Helm
+########################################
+#  Helm
+########################################
 if ! command -v helm &> /dev/null; then
   echo "Installing Helm..."
   HELM_VER="v3.17.3"
   TARBALL="helm-${HELM_VER}-${OS}-${ARCH}.tar.gz"
-  wget "https://get.helm.sh/${TARBALL}"
+  wget -q "https://get.helm.sh/${TARBALL}"
   tar -zxvf "${TARBALL}"
   sudo mv "${OS}-${ARCH}/helm" /usr/local/bin/helm
   rm -rf "${OS}-${ARCH}" "${TARBALL}"
 fi
 
-# Install the helm diff plugin used by helmfile
-helm plugin install https://github.com/databus23/helm-diff
-
-# Install helmfile
-if ! command -v helmfile &> /dev/null; then
-  echo "📦 helmfile not found. Installing..."
-  HELMFILE_VERSION="v0.162.0"
-  HELMFILE_URL="https://github.com/helmfile/helmfile/releases/download/${HELMFILE_VERSION}/helmfile_${OS}_${ARCH}"
-  INSTALL_DIR="/usr/local/bin"
-  curl -fsSL -o "/tmp/helmfile" "$HELMFILE_URL"
-  chmod +x "${INSTALL_DIR}/helmfile"
+########################################
+#  Helm diff plugin
+########################################
+if ! helm plugin list | grep -q diff; then
+  helm plugin install https://github.com/databus23/helm-diff
 fi
 
-# Install kustomize
+########################################
+#  helmfile
+########################################
+if ! command -v helmfile &> /dev/null; then
+  echo "📦 helmfile not found. Installing v1.1.3..."
+  HELMFILE_VERSION="1.1.3"
+  if [[ "$OS" == "darwin" && "$ARCH" == "arm64" ]]; then
+    ARCHIVE="helmfile_1.1.3_darwin_arm64.tar.gz"
+  else
+    ARCHIVE="helmfile_${HELMFILE_VERSION}_${OS}_${ARCH}.tar.gz"
+  fi
+
+  URL="https://github.com/helmfile/helmfile/releases/download/v${HELMFILE_VERSION}/${ARCHIVE}"
+  curl -sSL -o "/tmp/helmfile.tar.gz" "$URL"
+  tar -xzf /tmp/helmfile.tar.gz -C /tmp
+  sudo mv /tmp/helmfile /usr/local/bin/helmfile
+  sudo chmod +x /usr/local/bin/helmfile
+  rm /tmp/helmfile.tar.gz
+fi
+
+########################################
+#  kustomize
+########################################
 if ! command -v kustomize &> /dev/null; then
   echo "Installing Kustomize..."
   KUSTOMIZE_TAG=$(curl -s https://api.github.com/repos/kubernetes-sigs/kustomize/releases/latest | jq -r '.tag_name')
@@ -109,6 +138,4 @@ if ! command -v kustomize &> /dev/null; then
   rm kustomize.tar.gz
 fi
 
-# Install helmfile
-
-echo "All tools installed successfully."
+echo "✅ All tools installed successfully."
