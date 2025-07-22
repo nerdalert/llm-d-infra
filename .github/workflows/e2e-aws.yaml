@@ -289,17 +289,17 @@ jobs:
             sleep 10
             echo "Deploying llm-d infrastructure..."
             export HF_TOKEN=$HF_TOKEN
-            ./llmd-infra-installer.sh --namespace llm-d -r infra-simple --minikube --disable-metrics-collection --gateway kgateway | tee ~/llmd-installer.log
+            ./llmd-infra-installer.sh --namespace llm-d -r inference-scheduler-infra --minikube --disable-metrics-collection --gateway kgateway | tee ~/llmd-installer.log
           EOF
 
-      - name: Deploy simple example
-        id: deploy-simple
+      - name: Deploy inference-scheduler example
+        id: deploy-inference-scheduler
         run: |
           ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@$INSTANCE_IP << EOF
             set -e
-            cd llm-d-infra/quickstart/examples/simple
-            echo "Deploying simple example with Qwen model..."
-            helmfile --selector managedBy=helmfile apply helmfile.yaml | tee ~/simple-deployment.log
+            cd llm-d-infra/quickstart/examples/inference-scheduler
+            echo "Deploying inference-scheduler example with Qwen model..."
+            helmfile --selector managedBy=helmfile apply helmfile.yaml | tee ~/inference-scheduler-deployment.log
           EOF
 
       - name: Wait for pods to be Ready
@@ -343,7 +343,7 @@ jobs:
 
             mv ~/llmd-installer.log pod-logs/ || true
             mv ~/install-deps.log pod-logs/ || true
-            mv ~/simple-deployment.log pod-logs/ || true
+            mv ~/inference-scheduler-deployment.log pod-logs/ || true
             tar -czf pod-logs.tar.gz pod-logs
           EOF
 
