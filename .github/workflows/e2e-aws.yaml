@@ -284,7 +284,6 @@ jobs:
           ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@$INSTANCE_IP << EOF
             set -e
             cd llm-d-infra/quickstart
-            # cd llm-d-infra/quickstart
             echo "Starting minikube with gpu support enabled..."
             minikube start --driver docker --container-runtime docker --gpus all --memory no-limit
             sleep 10
@@ -299,7 +298,6 @@ jobs:
           ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@$INSTANCE_IP << EOF
             set -e
             cd llm-d-infra/quickstart/examples/simple
-            # cd llm-d-infra/quickstart/examples/simple
             echo "Deploying simple example with Qwen model..."
             helmfile --selector managedBy=helmfile apply helmfile.yaml | tee ~/simple-deployment.log
           EOF
@@ -324,9 +322,7 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@"$INSTANCE_IP" <<'EOF'
             set -e
-            # cd llm-d-infra/.github/scripts/e2e
             cd llm-d-infra/.github/scripts/e2e
-            export MODEL_ID="Qwen3-0.6B"
             ./e2e-validate.sh
           EOF
 
