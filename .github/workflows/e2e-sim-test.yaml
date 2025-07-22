@@ -3,6 +3,10 @@ name: E2E Simulation Test
 on:
   workflow_dispatch:
     inputs:
+      pr_or_branch:
+        description: "Pull‑request number **or** branch name to test (default: main)"
+        required: false
+        default: "main"
       gateway_type:
         description: "Gateway type to use"
         required: false
@@ -32,13 +36,36 @@ jobs:
       HF_TOKEN: dummy_token_for_sim
 
     steps:
-      # ──────────────────────────────────────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      # ──────────────────────────────────────────────────────────────────────────────
+      - name: Determine if pr_or_branch is a PR number
+        id: check_pr
+        env:
+          PR_OR_BRANCH: ${{ github.event.inputs.pr_or_branch }}
+        shell: bash
+        run: |
+          echo "PR_OR_BRANCH=${PR_OR_BRANCH:-main}" >> "$GITHUB_ENV"
+          if [[ "$PR_OR_BRANCH" =~ ^[0-9]+$ ]]; then
+            echo "is_pr=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_pr=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fetch and checkout PR
+        if: steps.check_pr.outputs.is_pr == 'true'
+        shell: bash
+        run: |
+          git fetch origin pull/"$PR_OR_BRANCH"/merge:pr-"$PR_OR_BRANCH"
+          git checkout pr-"$PR_OR_BRANCH"
+
+      - name: Checkout branch
+        if: steps.check_pr.outputs.is_pr == 'false'
+        shell: bash
+        run: |
+          git fetch --all --tags
+          git checkout "$PR_OR_BRANCH"
+
       - name: Create kind config
         run: |
           mkdir -p helpers/kind-testing
@@ -62,7 +89,6 @@ jobs:
           cluster_name: llm-d-test
           wait: 120s
 
-      # ──────────────────────────────────────────────────────────────────────────────
       - name: Install dependencies
         run: |
           cd quickstart
@@ -78,7 +104,6 @@ jobs:
         run: |
           kubectl create namespace "${{ env.NAMESPACE }}" || echo "Namespace already exists"
 
-      # ──────────────────────────────────────────────────────────────────────────────
       - name: Deploy llm-d infra
         run: |
           cd quickstart
@@ -95,7 +120,6 @@ jobs:
             --namespace "${{ env.NAMESPACE }}" \
             --timeout=300s || true
 
-      # ──────────────────────────────────────────────────────────────────────────────
       - name: Deploy simulation services with helmfile
         run: |
           cd quickstart/examples/sim
@@ -113,7 +137,6 @@ jobs:
           echo "✅ All pods are ready."
           kubectl get pods -n "${{ env.NAMESPACE }}"
 
-      # ──────────────────────────────────────────────────────────────────────────────
       - name: Apply Istio DestinationRule for EPP
         if: ${{ env.GATEWAY_TYPE == 'istio' }}
         run: |
@@ -138,7 +161,6 @@ jobs:
                 insecureSkipVerify: true
           EOF
 
-      # ──────────────────────────────────────────────────────────────────────────────
       - name: Show deployment status
         run: |
           echo "=== Pods ==="
@@ -150,7 +172,6 @@ jobs:
           echo "=== Helm releases ==="
           helm list --all-namespaces
 
-      # ──────────────────────────────────────────────────────────────────────────────
       - name: Locate inference‑gateway Service
         id: gateway
         run: |
@@ -164,7 +185,6 @@ jobs:
           echo "✅ Found gateway service: $GATEWAY_SERVICE"
           echo "service_name=$GATEWAY_SERVICE" >> "$GITHUB_OUTPUT"
 
-      # ──────────────────────────────────────────────────────────────────────────────
       - name: Port-forward gateway service
         env:
           SERVICE_NAME: ${{ steps.gateway.outputs.service_name }}
@@ -201,7 +221,6 @@ jobs:
 
           echo "✅ Port‑forward working"
 
-      # ──────────────────────────────────────────────────────────────────────────────
       - name: Test /v1/models endpoint
         run: |
           echo "🧪 Testing /v1/models…"
@@ -231,7 +250,6 @@ jobs:
           echo "$response" | jq -e '.choices[0].text' > /dev/null
           echo "✅ /v1/completions passed"
 
-      # ──────────────────────────────────────────────────────────────────────────────
       - name: Validate Uninstall
         if: always()
         run: |
