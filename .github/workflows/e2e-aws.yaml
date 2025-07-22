@@ -311,7 +311,7 @@ jobs:
               kubectl get pods -n llm-d --no-headers > pods.txt
             cat pods.txt
             not_ready=$(awk '{split($2,a,"/"); if(a[1]!=a[2]) c++} END{print c+0}' pods.txt)
-            [[ "$not_ready" -eq 0 ]] && { echo "✅ Pods Ready"; exit 0; }
+            [[ "$not_ready" -eq 0 ]] && { echo "✅ Pods Ready"; echo "Waiting an additional 120 seconds..."; sleep 120; exit 0; }
             sleep 60
           done
           echo "❌ Pods not Ready after timeout"; exit 1
