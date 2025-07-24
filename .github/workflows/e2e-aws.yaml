@@ -49,6 +49,7 @@ jobs:
       PODS_READINESS_TIMEOUT: ${{ github.event.inputs.wait_for_pods }}
       DISK_SIZE: ${{ github.event.inputs.disk_size }}
       PR_OR_BRANCH: ${{ github.event.inputs.pr_or_branch }}
+      NAMESPACE: ${{ github.event.inputs.namespace }}
 
     steps:
       - name: Checkout
@@ -287,9 +288,9 @@ jobs:
             echo "Starting minikube with gpu support enabled..."
             minikube start --driver docker --container-runtime docker --gpus all --memory no-limit
             sleep 10
-            echo "Deploying llm-d infrastructure..."
+            echo "Deploying llm-d infrastructure into namespace: $NAMESPACE ..."
             export HF_TOKEN=$HF_TOKEN
-            ./llmd-infra-installer.sh --namespace llm-d -r inference-scheduling-infra --minikube --disable-metrics-collection --gateway kgateway | tee ~/llmd-installer.log
+            ./llmd-infra-installer.sh --namespace "$NAMESPACE" -r inference-scheduling-infra --minikube --disable-metrics-collection --gateway kgateway | tee ~/llmd-installer.log
           EOF
 
       - name: Deploy inference-scheduling example
@@ -305,10 +306,10 @@ jobs:
       - name: Wait for pods to be Ready
         id: pod-readiness
         run: |
-          echo "Waiting up to ${PODS_READINESS_TIMEOUT} minutes for llm‑d pods…"
+          echo "Waiting up to ${PODS_READINESS_TIMEOUT} minutes for ${NAMESPACE} pods…"
           for i in $(seq 1 "$PODS_READINESS_TIMEOUT"); do
             ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@"$INSTANCE_IP" \
-              kubectl get pods -n llm-d --no-headers > pods.txt
+              kubectl get pods -n "$NAMESPACE" --no-headers > pods.txt
             cat pods.txt
             not_ready=$(awk '{split($2,a,"/"); if(a[1]!=a[2]) c++} END{print c+0}' pods.txt)
             [[ "$not_ready" -eq 0 ]] && { echo "✅ Pods Ready"; echo "Waiting an additional 120 seconds..."; sleep 120; exit 0; }
@@ -330,16 +331,16 @@ jobs:
         id: collect-logs
         if: always()
         run: |
-          echo "Collecting logs from pods in llm-d namespace..."
+          echo "Collecting logs from pods in ${NAMESPACE} namespace..."
           ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@$INSTANCE_IP << EOF
             mkdir -p pod-logs
-            echo "Fetching llm-d pods log..."
-            kubectl get pods -n llm-d --no-headers -o custom-columns=":metadata.name" \
-            | xargs -I{} sh -c 'kubectl logs --all-containers=true -n llm-d {} > "pod-logs/{}.log" 2>&1'
+            echo "Fetching ${NAMESPACE} pods log..."
+            kubectl get pods -n "$NAMESPACE" --no-headers -o custom-columns=":metadata.name" \
+            | xargs -I{} sh -c 'kubectl logs --all-containers=true -n "$NAMESPACE" {} > "pod-logs/{}.log" 2>&1'
 
-            echo "Fetching llm-d pods descriptions..."
-            kubectl get pods -n llm-d --no-headers -o custom-columns=":metadata.name" \
-            | xargs -I{} sh -c 'kubectl describe pod -n llm-d {} > "pod-logs/{}-describe.log" 2>&1'
+            echo "Fetching ${NAMESPACE} pods descriptions..."
+            kubectl get pods -n "$NAMESPACE" --no-headers -o custom-columns=":metadata.name" \
+            | xargs -I{} sh -c 'kubectl describe pod -n "$NAMESPACE" {} > "pod-logs/{}-describe.log" 2>&1'
 
             mv ~/llmd-installer.log pod-logs/ || true
             mv ~/install-deps.log pod-logs/ || true
