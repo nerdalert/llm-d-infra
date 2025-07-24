@@ -14,10 +14,10 @@ This is a simulation example that demonstrates how to deploy using the llm-d-inf
 ```bash
 # From the repo root
 cd quickstart
-HF_TOKEN=$(HFTOKEN) ./llmd-infra-installer.sh --namespace llm-d -r sim --gateway kgateway
+HF_TOKEN=$(HFTOKEN) ./llmd-infra-installer.sh --namespace llm-d-sim -r infra-sim --gateway kgateway
 ```
 
-    - It should be noted release name `sim` is important here, because it matches up with pre-built values files used in this example.
+    - It should be noted release name `infra-sim` is important here, because it matches up with pre-built values files used in this example.
 
 3. Use the helmfile to apply the modelservice and GIE charts on top of it.
 
@@ -121,7 +121,7 @@ To remove the deployment:
 helmfile --selector managedBy=helmfile destroy
 
 # Remove the infrastructure
-helm uninstall sim -n llm-d
+helm uninstall infra-sim -n llm-d-sim
 ```
 
 ## Customization
