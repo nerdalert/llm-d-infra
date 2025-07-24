@@ -14,10 +14,10 @@ This is a simulation example that demonstrates how to deploy using the llm-d-inf
 ```bash
 # From the repo root
 cd quickstart
-HF_TOKEN=$(HFTOKEN) ./llmd-infra-installer.sh --namespace llm-d -r sim --gateway kgateway
+HF_TOKEN=$(HFTOKEN) ./llmd-infra-installer.sh --namespace llm-d-sim -r infra-sim --gateway kgateway
 ```
 
-    - It should be noted release name `sim` is important here, because it matches up with pre-built values files used in this example.
+    - It should be noted release name `infra-sim` is important here, because it matches up with pre-built values files used in this example.
 
 3. Use the helmfile to apply the modelservice and GIE charts on top of it.
 
@@ -35,7 +35,7 @@ helmfile --selector managedBy=helmfile apply helmfile.yaml
 1. Firstly, you should be able to list all helm releases to view all charts that should be installed:
 
 ```bash
-helm list --all-namespaces --all --debug
+helm list -n llm-d-sim --all --debug
 ```
 
 Note: if you chose to use `istio` as your Gateway provider you would see those (`istiod` and `istio-base` in the `istio-system` namespace) instead of the kgateway based ones.
@@ -54,7 +54,7 @@ In this case we have found that our gateway service is called `sim-inference-gat
 3. `port-forward` the service to we can curl it:
 
 ```bash
-kubectl port-forward service/sim-inference-gateway 8000:80
+kubectl port-forward -n llm-d-sim service/sim-inference-gateway 8000:80
 ```
 
 4. Try curling the `/v1/models` endpoint:
@@ -121,7 +121,7 @@ To remove the deployment:
 helmfile --selector managedBy=helmfile destroy
 
 # Remove the infrastructure
-helm uninstall sim -n llm-d
+helm uninstall infra-sim -n llm-d-sim
 ```
 
 ## Customization

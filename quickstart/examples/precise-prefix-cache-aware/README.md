@@ -16,7 +16,7 @@ This is a simple quickstart demonstrating how to configure the inference schedul
 ```bash
 # From the repo root
 cd quickstart
-HF_TOKEN=$(HFTOKEN) ./llmd-infra-installer.sh --namespace llm-d -r infra-kv-events --gateway kgateway
+HF_TOKEN=$(HFTOKEN) ./llmd-infra-installer.sh --namespace llm-d-precise -r infra-kv-events --gateway kgateway
 ```
     - It should be noted release name `infra-kv-events` is important here, because it matches up with pre-built values files used in this example.
 
@@ -29,22 +29,20 @@ helmfile --selector managedBy=helmfile apply helmfile.yaml --skip-diff-on-instal
 
 ## Verify the Installation
 
-1. Firstly, you should be able to list all helm releases to view all 4 charts that should be installed:
+1. Firstly, you should be able to list all helm releases in the `llm-d-precise` ns to view all 3 charts that should be installed:
 
 ```bash
-helm list --all-namespaces --all --debug
+helm list -n llm-d-precise --all --debug
 NAME          	NAMESPACE      	REVISION	UPDATED                             	STATUS  	CHART                    	APP VERSION
-infra-kv-events	llm-d          	1       	2025-07-14 10:46:56.074433 -0700 PDT	deployed	llm-d-infra-1.0.1        	0.1
-kgateway      	kgateway-system	1       	2025-07-14 10:46:43.577928 -0700 PDT	deployed	kgateway-v2.0.3          	1.16.0
-kgateway-crds 	kgateway-system	1       	2025-07-14 10:46:39.26078 -0700  PDT 	deployed	kgateway-crds-v2.0.3     	1.16.0
-ms-kv-events   	llm-d          	1       	2025-07-14 10:57:25.726526 -0700 PDT	deployed	llm-d-modelservice-0.0.10	0.0.1
+infra-kv-events	llm-d-precise   1       	2025-07-14 10:46:56.074433 -0700 PDT	deployed	llm-d-infra-1.0.1        	0.1
+ms-kv-events   	llm-d-precise   1       	2025-07-14 10:57:25.726526 -0700 PDT	deployed	llm-d-modelservice-0.0.10	0.0.1
 ```
 
 Note: if you chose to use `istio` as your Gateway provider you would see those (`istiod` and `istio-base` in the `istio-system` namespace) instead of the kgateway based ones.
 
 2. Find the gateway service:
 ```bash
-kubectl get services -n llm-d
+kubectl get services
 NAME                               TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)             AGE
 infra-kv-events-inference-gateway  NodePort    172.30.172.142   <none>        80:30519/TCP        4m7s
 gaie-kv-events-epp                 ClusterIP   172.30.72.170    <none>        9002/TCP,5557/TCP   71s
@@ -54,7 +52,7 @@ In this case we have found that our gateway service is called `infra-kv-events-i
 3. `port-forward` the service to we can curl it:
 
 ```bash
-kubectl -n llm-d port-forward service/infra-kv-events-inference-gateway 8000:80
+kubectl -n llm-d-precise port-forward service/infra-kv-events-inference-gateway 8000:80
 ```
 
 4. Try curling the `/v1/models` endpoint:
@@ -143,7 +141,7 @@ curl http://localhost:8000/v1/completions \
 
 6. Check the inference-scheduler's prefix-cache-scorer's scores with the following command:
 ```bash
-kubectl logs -l inferencepool=gaie-kv-events-epp -n llm-d --tail 100 | grep "Got pod scores"
+kubectl logs -l inferencepool=gaie-kv-events-epp -n llm-d-precise --tail 100 | grep "Got pod scores"
 ```
 
 You should see output similar to:
@@ -164,7 +162,7 @@ indicating that it had cached the KV-blocks from the first call.
 
 8. See the `kvblock.Index` metrics in the `gaie-kv-events-epp` pod:
 ```bash
-kubectl logs -l inferencepool=gaie-kv-events-epp -n llm-d --tail 100 | grep "metrics beat"
+kubectl logs -l inferencepool=gaie-kv-events-epp -n llm-d-precise --tail 100 | grep "metrics beat"
 ```
 You should see output similar to:
 ```log
@@ -185,7 +183,7 @@ To remove the deployment:
 helmfile --selector managedBy=helmfile destroy
 
 # Remove the infrastructure
-helm uninstall infra-kv-events -n llm-d
+helm uninstall infra-kv-events -n llm-d-precise
 ```
 
 ## Customization

@@ -46,6 +46,8 @@ cd examples/pd-disaggregation
 helmfile --selector managedBy=helmfile apply helmfile.yaml --skip-diff-on-install
 ```
 
+> Note: When using Istio as the gateway, e.g. `--gateway istio`, you will need to apply a `DestinationRule` described in [Temporary Istio Workaround](../../istio-workaround.md).
+
 We can see that the charts were deployed:
 
 ```bash

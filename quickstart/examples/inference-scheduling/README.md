@@ -148,7 +148,7 @@ To remove the deployment:
 helmfile --selector managedBy=helmfile destroy
 
 # Remove the infrastructure
-helm uninstall infra-inference-scheduling -n llm-d
+helm uninstall infra-inference-scheduling -n llm-d-inference-scheduling
 ```
 
 ## Customization

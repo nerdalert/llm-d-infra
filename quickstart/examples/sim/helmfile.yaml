@@ -4,7 +4,7 @@ repositories:
 
 releases:
   - name: infra-sim
-    namespace: llm-d
+    namespace: llm-d-sim
     chart: oci://ghcr.io/llm-d-incubation/llm-d-infra/llm-d-infra
     version: 1.0.7
     installed: true
@@ -12,25 +12,25 @@ releases:
       managedBy: llm-d-infra-installer
 
   - name: gaie-sim
-    namespace: llm-d
+    namespace: llm-d-sim
     chart: oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
     version: v0.5.1
     installed: true
     needs:
-      - llm-d/infra-sim
+      - llm-d-sim/infra-sim
     values:
       - gaie-sim/values.yaml
     labels:
       managedBy: helmfile
 
   - name: ms-sim
-    namespace: llm-d
+    namespace: llm-d-sim
     chart: llm-d-modelservice/llm-d-modelservice
     version: 0.0.19
     installed: true
     needs:
-      - llm-d/infra-sim
-      - llm-d/gaie-sim
+      - llm-d-sim/infra-sim
+      - llm-d-sim/gaie-sim
     values:
       - ms-sim/values.yaml
     labels:
