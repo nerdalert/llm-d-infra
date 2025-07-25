@@ -324,7 +324,7 @@ jobs:
           ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@"$INSTANCE_IP" <<'EOF'
             set -e
             cd llm-d-infra/.github/scripts/e2e
-            ./e2e-validate.sh
+            ./e2e-validate.sh -n "$NAMESPACE"
           EOF
 
       - name: Collect and upload Kubernetes pod logs
