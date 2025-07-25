@@ -64,11 +64,7 @@ done
 MODEL_ID="${CLI_MODEL_ID:-}"
 
 echo "Namespace: $NAMESPACE"
-if [[ -n "$MODEL_ID" ]]; then
-  echo "Model ID:  $MODEL_ID"
-else
-  echo "Model ID:  none; will be discovered from first entry in /v1/models"
-fi
+echo "Model ID:  ${MODEL_ID:-none; will be discovered from first entry in /v1/models}"
 echo
 
 # ── generate a unique suffix ───────────────────────────────────────
@@ -84,11 +80,18 @@ infer_first_model() {
   printf '%s' "$1" | grep -o '"id":"[^"]*"' | head -n1 | cut -d'"' -f4
 }
 
+print_cmd() {
+  echo "  - Running command:"
+  echo "    kubectl run --rm -i curl-$1 \\
+      --namespace \"$NAMESPACE\" \\
+      --image=curlimages/curl --restart=Never -- \\
+      curl $2"
+}
+
 validation() {
-  # Discover the decode pod IP
   echo "-> Discovering decode pod…"
   POD_IP=$(kubectl get pods -n "$NAMESPACE" \
-    -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.podIP}{"\n"}{end}' \
+    -o jsonpath='{range .items[*]}{.metadata.name} {" "} {.status.podIP}{"\n"}{end}' \
     | grep decode | awk '{print $2}' | head -1)
 
   if [[ -z "$POD_IP" ]]; then
@@ -100,25 +103,12 @@ validation() {
   fi
   echo
 
-  # ── 1) GET /v1/models on decode pod ─────────────────────────────────────────
   echo "1 -> GET /v1/models from decode pod…"
   ID=$(gen_id)
-  if [[ "$VERBOSE" == true ]]; then
-    cat <<CMD
-  - Running command:
-    kubectl run --rm -i curl-${ID} \\
-      --namespace "${NAMESPACE}" \\
-      --image=curlimages/curl --restart=Never -- \\
-      curl -sS --fail http://${POD_IP}:8000/v1/models \\
-        -H 'accept: application/json' \\
-        -H 'Content-Type: application/json'
+  [[ "$VERBOSE" == true ]] && print_cmd "$ID" "-sS --fail http://${POD_IP}:8000/v1/models -H 'accept: application/json' -H 'Content-Type: application/json'"
 
-CMD
-  fi
   set +e
-  LIST_JSON=$(kubectl run --rm -i curl-"$ID" \
-    --namespace "$NAMESPACE" \
-    --image=curlimages/curl --restart=Never -- \
+  LIST_JSON=$(kubectl run --rm -i curl-$ID --namespace "$NAMESPACE" --image=curlimages/curl --restart=Never -- \
     curl -sS --fail http://${POD_IP}:8000/v1/models \
       -H 'accept: application/json' \
       -H 'Content-Type: application/json')
@@ -131,11 +121,10 @@ CMD
   else
     echo "❌ Failed (Exit Code: $EXIT_CODE)"
     ((FAILED_COUNT++))
-    return # Cannot proceed without a model list
+    return
   fi
   echo
 
-  # Validate or infer model
   echo "-> Validating model ID…"
   if [[ -z "$MODEL_ID" ]]; then
     MODEL_ID=$(infer_first_model "$LIST_JSON")
@@ -151,72 +140,52 @@ CMD
   fi
   echo
 
-  # ── 2) POST /v1/completions on decode pod ──────────────────────────────────
-  if [[ $FAILED_COUNT -eq 0 ]]; then
-    echo "2 -> POST /v1/completions to decode pod…"
-    ID=$(gen_id)
-    if [[ "$VERBOSE" == true ]]; then cat <<CMD
-  - Running command:
-    kubectl run --rm -i curl-${ID} \\
-      --namespace "${NAMESPACE}" \\
-      --image=curlimages/curl --restart=Never -- \\
-      curl -sS --fail -X POST http://${POD_IP}:8000/v1/completions \\
-        -H 'accept: application/json' \\
-        -H 'Content-Type: application/json' \\
-        -d '{
-          "model":"${MODEL_ID}",
-          "prompt":"Who are you?"
-        }'
+  echo "2 -> POST /v1/completions to decode pod…"
+  ID=$(gen_id)
+  [[ "$VERBOSE" == true ]] && print_cmd "$ID" "-sS --fail -X POST http://${POD_IP}:8000/v1/completions -H 'accept: application/json' -H 'Content-Type: application/json' -d '{\"model\":\"$MODEL_ID\",\"prompt\":\"Who are you?\"}'"
 
-CMD
-    fi
-    set +e
-    COMPLETION_JSON=$(kubectl run --rm -i curl-"$ID" --namespace "$NAMESPACE" --image=curlimages/curl --restart=Never -- curl -sS --fail -X POST http://${POD_IP}:8000/v1/completions -H 'accept: application/json' -H 'Content-Type: application/json' -d '{"model":"'"$MODEL_ID"'","prompt":"Who are you?"}')
-    EXIT_CODE=$?
-    set -e
-
-    if [[ $EXIT_CODE -eq 0 ]]; then
-      echo "✅ Success"
-      echo "$COMPLETION_JSON"
-    else
-      echo "❌ Failed (Exit Code: $EXIT_CODE)"
-      ((FAILED_COUNT++))
-      echo "$COMPLETION_JSON"
-    fi
-    echo
-  fi
-
-  # ── 3) Discover gateway ────────────────────────────────────────────────────
-  echo "-> Discovering gateway…"
   set +e
-  GATEWAY_NAME=$(kubectl get gateway -n "$NAMESPACE" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-  GATEWAY_ADDR=$(kubectl get gateway -n "$NAMESPACE" -o jsonpath='{.items[0].status.addresses[0].value}' 2>/dev/null)
+  COMPLETION_JSON=$(kubectl run --rm -i curl-$ID --namespace "$NAMESPACE" --image=curlimages/curl --restart=Never -- \
+    curl -sS --fail -X POST http://${POD_IP}:8000/v1/completions \
+      -H 'accept: application/json' \
+      -H 'Content-Type: application/json' \
+      -d '{"model":"'"$MODEL_ID"'","prompt":"Who are you?"}')
+  EXIT_CODE=$?
   set -e
-  if [[ -z "$GATEWAY_ADDR" ]] || [[ -z "$GATEWAY_NAME" ]]; then
-    echo "❌ Failed: Could not discover Gateway in namespace $NAMESPACE"
-    ((FAILED_COUNT++))
-    return
+
+  if [[ $EXIT_CODE -eq 0 ]]; then
+    echo "✅ Success"
+    echo "$COMPLETION_JSON"
   else
-    echo "✅ Success: Found gateway '${GATEWAY_NAME}' at ${GATEWAY_ADDR}"
+    echo "❌ Failed (Exit Code: $EXIT_CODE)"
+    ((FAILED_COUNT++))
+    echo "$COMPLETION_JSON"
   fi
   echo
 
-  # ── 3) GET /v1/models via the gateway ─────────────────────────────────────
+  echo "-> Discovering gateway service…"
+  GATEWAY_SVC=$(kubectl get svc -n "$NAMESPACE" -o json | jq -r '.items[] | select(.metadata.name | test(".*-inference-gateway$")).metadata.name' | head -n1)
+
+  if [[ -z "$GATEWAY_SVC" ]]; then
+    echo "❌ Failed: Could not find a gateway service in namespace $NAMESPACE"
+    ((FAILED_COUNT++))
+    return
+  fi
+
+  GATEWAY_HOST="${GATEWAY_SVC}.${NAMESPACE}.svc.cluster.local"
+
+  echo "✅ Success: Using gateway service $GATEWAY_HOST"
+  echo
+
   echo "3 -> GET /v1/models via gateway…"
   ID=$(gen_id)
-  if [[ "$VERBOSE" == true ]]; then cat <<CMD
-  - Running command:
-    kubectl run --rm -i curl-${ID} \\
-      --namespace "${NAMESPACE}" \\
-      --image=curlimages/curl --restart=Never -- \\
-      curl -sS --fail http://${GATEWAY_ADDR}/v1/models \\
-        -H 'accept: application/json' \\
-        -H 'Content-Type: application/json'
+  [[ "$VERBOSE" == true ]] && print_cmd "$ID" "-sS --fail http://${GATEWAY_HOST}/v1/models -H 'accept: application/json' -H 'Content-Type: application/json'"
 
-CMD
-  fi
   set +e
-  GW_JSON=$(kubectl run --rm -i curl-"$ID" --namespace "$NAMESPACE" --image=curlimages/curl --restart=Never -- curl -sS --fail http://${GATEWAY_ADDR}/v1/models -H 'accept: application/json' -H 'Content-Type: application/json')
+  GW_JSON=$(kubectl run --rm -i curl-$ID --namespace "$NAMESPACE" --image=curlimages/curl --restart=Never -- \
+    curl -sS --fail http://${GATEWAY_HOST}/v1/models \
+      -H 'accept: application/json' \
+      -H 'Content-Type: application/json')
   EXIT_CODE=$?
   set -e
 
@@ -229,40 +198,28 @@ CMD
   fi
   echo
 
-  # ── 4) POST /v1/completions via gateway ────────────────────────────────────
-  if [[ $FAILED_COUNT -eq 0 ]]; then
-    echo "4 -> POST /v1/completions via gateway…"
-    ID=$(gen_id)
-    if [[ "$VERBOSE" == true ]]; then cat <<CMD
-  - Running command:
-    kubectl run --rm -i curl-${ID} \\
-      --namespace "${NAMESPACE}" \\
-      --image=curlimages/curl --restart=Never -- \\
-      curl -sS --fail -X POST http://${GATEWAY_ADDR}/v1/completions \\
-        -H 'accept: application/json' \\
-        -H 'Content-Type: application/json' \\
-        -d '{
-          "model":"${MODEL_ID}",
-          "prompt":"Who are you?"
-        }'
+  echo "4 -> POST /v1/completions via gateway…"
+  ID=$(gen_id)
+  [[ "$VERBOSE" == true ]] && print_cmd "$ID" "-sS --fail -X POST http://${GATEWAY_HOST}/v1/completions -H 'accept: application/json' -H 'Content-Type: application/json' -d '{\"model\":\"$MODEL_ID\",\"prompt\":\"Who are you?\"}'"
 
-CMD
-    fi
-    set +e
-    GW_COMPLETION_JSON=$(kubectl run --rm -i curl-"$ID" --namespace "$NAMESPACE" --image=curlimages/curl --restart=Never -- curl -sS --fail -X POST http://${GATEWAY_ADDR}/v1/completions -H 'accept: application/json' -H 'Content-Type: application/json' -d '{"model":"'"$MODEL_ID"'","prompt":"Who are you?"}')
-    EXIT_CODE=$?
-    set -e
+  set +e
+  GW_COMPLETION_JSON=$(kubectl run --rm -i curl-$ID --namespace "$NAMESPACE" --image=curlimages/curl --restart=Never -- \
+    curl -sS --fail -X POST http://${GATEWAY_HOST}/v1/completions \
+      -H 'accept: application/json' \
+      -H 'Content-Type: application/json' \
+      -d '{"model":"'"$MODEL_ID"'","prompt":"Who are you?"}')
+  EXIT_CODE=$?
+  set -e
 
-    if [[ $EXIT_CODE -eq 0 ]]; then
-      echo "✅ Success"
-      echo "$GW_COMPLETION_JSON"
-    else
-      echo "❌ Failed (Exit Code: $EXIT_CODE)"
-      ((FAILED_COUNT++))
-      echo "$GW_COMPLETION_JSON"
-    fi
-    echo
+  if [[ $EXIT_CODE -eq 0 ]]; then
+    echo "✅ Success"
+    echo "$GW_COMPLETION_JSON"
+  else
+    echo "❌ Failed (Exit Code: $EXIT_CODE)"
+    ((FAILED_COUNT++))
+    echo "$GW_COMPLETION_JSON"
   fi
+  echo
 }
 
 # ── Main ─────────────────────────────────────────────────────────────────────
