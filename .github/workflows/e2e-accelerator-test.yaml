@@ -1,31 +1,25 @@
 name: E2E Accelerator EC2 Test
 
 on:
+#  schedule: # TODO: enable once validated functional
+#    - cron: '0 8 * * *'  # 4AM Eastern (08:00 UTC)
   workflow_dispatch:
     inputs:
-      aws_instance_type:
-        description: 'EC2 instance type (default g6.12xlarge): g6e.2xlarge | g6e.8xlarge | g6e.16xlarge'
-        required: true
-        # g6.12xlarge-4xL4-24GB-GPU
-        default: 'g6.12xlarge'
-        type: string
       pr_or_branch:
         description: 'Pull-request number or branch name to test'
         required: true
         default: 'main'
         type: string
-      disk_size:
-        description: 'EC2 instance disk size?'
-        required: true
-        default: "300"
-        type: string
-      wait_for_pods:
-        description: 'Max wait time (in minutes) for pods to get ready:'
-        required: true
-        default: 10
-        type: number
+      gateway_type:
+        description: 'Gateway type to use'
+        required: false
+        default: 'kgateway'
+        type: choice
+        options:
+          - kgateway
+          - istio
       wait_for_termination:
-        description: 'Wait time (in minutes) before terminating for debugging:'
+        description: 'Wait time (in minutes) before terminating for debugging'
         required: true
         default: 0
         type: number
@@ -36,20 +30,23 @@ permissions:
   packages: read
 
 jobs:
-  deploy-on-ec2:
+  setup:
     runs-on: ubuntu-latest
-
+    outputs:
+      instance_id: ${{ steps.launch.outputs.instance_id }}
+      instance_ip: ${{ steps.launch.outputs.instance_ip }}
     env:
-      INSTANCE_TYPE: ${{ github.event.inputs.aws_instance_type }}
+      # g6.12xlarge-4xL4-24GB-GPU; 2 GPUs per matrix deployment
+      INSTANCE_TYPE: g6.12xlarge
       AMI_ID: ami-020cba7c55df1f615
       KEY_NAME: ${{ secrets.SSH_KEY_NAME }}
       REGION: ${{ secrets.AWS_REGION }}
       HF_TOKEN: ${{secrets.HF_TOKEN}}
       TERMINATION_TIMEOUT: ${{ github.event.inputs.wait_for_termination }}
-      PODS_READINESS_TIMEOUT: ${{ github.event.inputs.wait_for_pods }}
-      DISK_SIZE: ${{ github.event.inputs.disk_size }}
-      PR_OR_BRANCH: ${{ github.event.inputs.pr_or_branch }}
+      DISK_SIZE: "300"
+      PR_OR_BRANCH: ${{ github.event.inputs.pr_or_branch || 'main' }}
       NAMESPACE: ${{ github.event.inputs.namespace }}
+      GATEWAY_TYPE: ${{ github.event.inputs.gateway_type || 'kgateway' }}
 
     steps:
       - name: Checkout
@@ -84,7 +81,7 @@ jobs:
           sudo ./aws/install --update
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@f24d7193d98baebaeacc7e2227925dd47cc267f5
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -110,6 +107,7 @@ jobs:
             --query 'Instances[0].InstanceId' \
             --output text)
 
+          echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
           echo "INSTANCE_ID=$INSTANCE_ID" >> $GITHUB_ENV
 
           echo "Waiting for instance to be running..."
@@ -120,14 +118,14 @@ jobs:
             --query "Reservations[0].Instances[0].PublicIpAddress" \
             --output text)
 
+          echo "instance_ip=$PUBLIC_IP" >> "$GITHUB_OUTPUT"
           echo "INSTANCE_IP=$PUBLIC_IP" >> $GITHUB_ENV
+
           SECURITY_GROUP_ID=$(aws ec2 describe-instances \
             --instance-ids $INSTANCE_ID \
             --query "Reservations[0].Instances[0].SecurityGroups[0].GroupId" \
             --output text)
-
           echo "Authorizing SSH in security group $SECURITY_GROUP_ID..."
-
           aws ec2 authorize-security-group-ingress \
             --group-id $SECURITY_GROUP_ID \
             --protocol tcp \
@@ -185,7 +183,7 @@ jobs:
             ./install-deps.sh | tee ~/install-deps.log
           EOF
 
-      - name: Setup docker engine
+      - name: Setup container runtime
         id: setup-docker
         run: |
           ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@$INSTANCE_IP << EOF
@@ -194,7 +192,6 @@ jobs:
             sudo install -m 0755 -d /etc/apt/keyrings
             sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
             sudo chmod a+r /etc/apt/keyrings/docker.asc
-
             echo \
               "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
               $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | \
@@ -240,7 +237,7 @@ jobs:
           echo "Waiting for instance to become healthy again..."
           aws ec2 wait instance-status-ok --instance-ids $INSTANCE_ID
 
-      - name: Wait for SSH to be ready
+      - name: Wait for SSH to be ready after reboot
         run: |
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > key.pem
           chmod 600 key.pem
@@ -279,90 +276,211 @@ jobs:
             sudo install minikube-linux-amd64 /usr/local/bin/minikube && rm minikube-linux-amd64
           EOF
 
-      - name: Run installer to deploy minikube-gpu and llm-d infrastructure
-        id: run-installer
+      - name: Start Shared Minikube Cluster
         run: |
-          ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@$INSTANCE_IP << EOF
-            set -e
-            cd llm-d-infra/quickstart
+          ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@${{ env.INSTANCE_IP }} <<'EOF'
+            set -euo pipefail
+            set -x
             echo "Starting minikube with gpu support enabled..."
             minikube start --driver docker --container-runtime docker --gpus all --memory no-limit
             sleep 10
-            echo "Deploying llm-d infrastructure into namespace: $NAMESPACE ..."
-            export HF_TOKEN=$HF_TOKEN
-            ./llmd-infra-installer.sh --namespace "$NAMESPACE" -r inference-scheduling-infra --minikube --disable-metrics-collection --gateway kgateway | tee ~/llmd-installer.log
+            echo "✅ Minikube started."
           EOF
 
-      - name: Deploy inference-scheduling example
-        id: deploy-inference-scheduling
+  deploy-and-validate:
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        deployment:
+          - name: precise-prefix-cache-aware
+            namespace: llm-d-precise
+            installer_args: "-r infra-kv-events"
+            example_dir: examples/precise-prefix-cache-aware
+            log_file: llmd-precise-installer.log
+            helm_log_file: precise-prefix-deployment.log
+
+          - name: inference-scheduling
+            namespace: llm-d-inference-scheduling
+            installer_args: "-r infra-inference-scheduling"
+            example_dir: examples/inference-scheduling
+            log_file: llmd-inference-installer.log
+            helm_log_file: inference-scheduling-deployment.log
+
+    env:
+      INSTANCE_IP: ${{ needs.setup.outputs.instance_ip }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      NAMESPACE: ${{ matrix.deployment.namespace }}
+      GATEWAY_TYPE: ${{ github.event.inputs.gateway_type || 'kgateway' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup SSH Key
+        run: |
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > key.pem
+          chmod 600 key.pem
+
+      - name: Run installer to deploy llm-d infrastructure
+        run: |
+          # This script now includes a file lock to serialize this step since the kgateway CRD install currently fails
+          ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@$INSTANCE_IP "HF_TOKEN=$HF_TOKEN GATEWAY_TYPE=$GATEWAY_TYPE bash -s" <<'EOF'
+          set -euo pipefail
+          LOCK_DIR="/tmp/installer.lock"
+          echo "Attempting to acquire lock: ${LOCK_DIR}"
+          # Loop until the lock directory can be created
+          while ! mkdir "${LOCK_DIR}" 2>/dev/null; do
+             echo "Lock is held by another process. Waiting 10 seconds..."
+             sleep 10
+          done
+          echo "Lock acquired."
+          # Ensure the lock is released when the script exits
+          trap 'echo "Releasing lock..."; rmdir "$LOCK_DIR" 2>/dev/null || true' exit
+          set -x
+          cd llm-d-infra/quickstart
+          echo "Deploying llm-d infrastructure into namespace: ${{ matrix.deployment.namespace }} ..."
+          ./llmd-infra-installer.sh \
+              --namespace "${{ matrix.deployment.namespace }}" \
+              ${{ matrix.deployment.installer_args }} \
+              --gateway "$GATEWAY_TYPE" \
+              --disable-metrics-collection | tee ~/${{ matrix.deployment.log_file }}
+          EOF
+
+      - name: Deploy example deployment
         run: |
           ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@$INSTANCE_IP << EOF
-            set -e
-            cd llm-d-infra/quickstart/examples/inference-scheduling
-            echo "Deploying inference-scheduling example with Qwen model..."
-            helmfile --selector managedBy=helmfile apply helmfile.yaml | tee ~/inference-scheduling-deployment.log
+            set -euo pipefail
+            set -x
+            cd llm-d-infra/quickstart/${{ matrix.deployment.example_dir }}
+            echo "Deploying ${{ matrix.deployment.name }} example..."
+            helmfile --selector managedBy=helmfile apply helmfile.yaml --skip-diff-on-install | tee ~/${{ matrix.deployment.helm_log_file }}
           EOF
 
-      - name: Wait for pods to be Ready
-        id: pod-readiness
+      - name: Wait for all pods to be ready
         run: |
-          echo "Waiting up to ${PODS_READINESS_TIMEOUT} minutes for ${NAMESPACE} pods…"
-          for i in $(seq 1 "$PODS_READINESS_TIMEOUT"); do
-            ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@"$INSTANCE_IP" \
-              kubectl get pods -n "$NAMESPACE" --no-headers > pods.txt
-            cat pods.txt
-            not_ready=$(awk '{split($2,a,"/"); if(a[1]!=a[2]) c++} END{print c+0}' pods.txt)
-            [[ "$not_ready" -eq 0 ]] && { echo "✅ Pods Ready"; echo "Waiting an additional 120 seconds..."; sleep 120; exit 0; }
-            sleep 60
-          done
-          echo "❌ Pods not Ready after timeout"; exit 1
+          echo "⏳ Waiting for all pods in namespace '${{ env.NAMESPACE }}' to become ready..."
+          ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@$INSTANCE_IP <<EOF
+            set -euo pipefail
+            kubectl wait pod \
+              --for=condition=Ready \
+              --all \
+              -n "${NAMESPACE}" \
+              --timeout=6m
+            sleep 120 # TODO: remove this once examples have readiness probes
+            echo "✅ All pods are ready."
+            kubectl get pods -n "${NAMESPACE}"
+          EOF
+
+      - name: Show deployment status
+        run: |
+          ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@$INSTANCE_IP <<EOF
+            set -euo pipefail
+            echo "=== Pods ==="
+            kubectl get pods -n "${NAMESPACE}"
+            echo ""
+            echo "=== Services ==="
+            kubectl get svc -n "${NAMESPACE}"
+            echo ""
+            echo "=== Helm releases ==="
+            helm list -n "${NAMESPACE}" || true
+          EOF
+
+      - name: Apply Istio DestinationRule
+        if: ${{ env.GATEWAY_TYPE == 'istio' }}
+        run: |
+          set -euo pipefail
+          NS="${NAMESPACE}"
+
+          echo "🔎 Locating *-epp service in namespace $NS …"
+          EPP_NAME=$(ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@$INSTANCE_IP \
+              kubectl get svc -n "$NS" -o custom-columns=:metadata.name |
+              tr ' ' '\n' | grep -- '-epp$' | head -n1 || true)
+
+          echo "EPP_NAME = ${EPP_NAME:-<none found>}"
+
+          if [[ -z "$EPP_NAME" ]]; then
+            echo "❌ No Service ending in -epp found; aborting"
+            exit 1
+          fi
+
+          export EPP_NAME
+          TEMPLATE="$GITHUB_WORKSPACE/.github/manifests/istio-tls-destinationrule.yaml"
+          envsubst < "$TEMPLATE" > destinationrule.yaml
+
+          echo "📝 Rendered DestinationRule:"
+          cat destinationrule.yaml
+
+          # Copy and apply on the remote cluster
+          scp -o StrictHostKeyChecking=no -i key.pem destinationrule.yaml \
+              ubuntu@$INSTANCE_IP:/tmp/destinationrule.yaml
+          ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@$INSTANCE_IP \
+              "kubectl apply -n \"$NS\" -f /tmp/destinationrule.yaml && rm /tmp/destinationrule.yaml"
 
       - name: Inference test
-        id: inference-test
         if: steps.pod-readiness.outcome == 'success'
         run: |
-          ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@"$INSTANCE_IP" <<'EOF'
-            set -e
+          ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@"$INSTANCE_IP" <<EOF
+            set -euo pipefail
+            set -x
             cd llm-d-infra/.github/scripts/e2e
-            ./e2e-validate.sh -n "$NAMESPACE"
+            ./e2e-validate.sh -n "${NAMESPACE}"
           EOF
 
       - name: Collect and upload Kubernetes pod logs
-        id: collect-logs
         if: always()
         run: |
-          echo "Collecting logs from pods in ${NAMESPACE} namespace..."
+          echo "Collecting logs for namespace: ${NAMESPACE}"
+          REMOTE_TARBALL="pod-logs-${{ matrix.deployment.name }}.tar.gz"
           ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@$INSTANCE_IP << EOF
-            mkdir -p pod-logs
+            mkdir -p pod-logs-${{ matrix.deployment.name }}
+            cd pod-logs-${{ matrix.deployment.name }}
             echo "Fetching ${NAMESPACE} pods log..."
-            kubectl get pods -n "$NAMESPACE" --no-headers -o custom-columns=":metadata.name" \
-            | xargs -I{} sh -c 'kubectl logs --all-containers=true -n "$NAMESPACE" {} > "pod-logs/{}.log" 2>&1'
-
+            kubectl get pods -n "${NAMESPACE}" --no-headers -o custom-columns=":metadata.name" \
+            | xargs -I{} sh -c 'kubectl logs --all-containers=true -n "${NAMESPACE}" {} > "{}.log" 2>&1'
             echo "Fetching ${NAMESPACE} pods descriptions..."
-            kubectl get pods -n "$NAMESPACE" --no-headers -o custom-columns=":metadata.name" \
-            | xargs -I{} sh -c 'kubectl describe pod -n "$NAMESPACE" {} > "pod-logs/{}-describe.log" 2>&1'
-
-            mv ~/llmd-installer.log pod-logs/ || true
-            mv ~/install-deps.log pod-logs/ || true
-            mv ~/inference-scheduling-deployment.log pod-logs/ || true
-            tar -czf pod-logs.tar.gz pod-logs
+            kubectl get pods -n "${NAMESPACE}" --no-headers -o custom-columns=":metadata.name" \
+            | xargs -I{} sh -c 'kubectl describe pod -n "${NAMESPACE}" {} > "{}-describe.log" 2>&1'
+            mv ~/${{ matrix.deployment.log_file }} . || true
+            mv ~/${{ matrix.deployment.helm_log_file }} . || true
+            mv ~/install-deps.log . || true
+            cd ..
+            tar -czf "$REMOTE_TARBALL" pod-logs-${{ matrix.deployment.name }}
           EOF
-
-          scp -o StrictHostKeyChecking=no -i key.pem ubuntu@$INSTANCE_IP:pod-logs.tar.gz .
-
-          mkdir -p extracted-logs
-          tar -xzf pod-logs.tar.gz -C extracted-logs
-          echo "✅ Logs downloaded from the AWS instance."
+          scp -o StrictHostKeyChecking=no -i key.pem ubuntu@$INSTANCE_IP:"$REMOTE_TARBALL" .
+          mkdir -p extracted-logs-${{ matrix.deployment.name }}
+          tar -xzf "$REMOTE_TARBALL" -C extracted-logs-${{ matrix.deployment.name }}
+          echo "Logs downloaded from the AWS instance."
 
       - name: Upload pod logs as artifact
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: llmd-pod-logs
-          path: extracted-logs
+          name: llmd-pod-logs-${{ matrix.deployment.name }}
+          path: extracted-logs-${{ matrix.deployment.name }}
+
+  terminate:
+    needs: [setup, deploy-and-validate]
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      INSTANCE_ID: ${{ needs.setup.outputs.instance_id }}
+      REGION: ${{ secrets.AWS_REGION }}
+      TERMINATION_TIMEOUT: ${{ github.event.inputs.wait_for_termination }}
+
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Pause before termination (debug window)
-        if: always() && env.TERMINATION_TIMEOUT != '0'
+        if: env.TERMINATION_TIMEOUT != '0'
         run: |
           echo "⏳  Debug pause enabled for $TERMINATION_TIMEOUT minute(s)…"
           for ((i=1; i<=TERMINATION_TIMEOUT; i++)); do
@@ -371,7 +489,8 @@ jobs:
           done
 
       - name: Terminate EC2 instance
-        if: always()
         run: |
+          echo "Terminating instance $INSTANCE_ID..."
           aws ec2 terminate-instances --instance-ids $INSTANCE_ID
+          echo "Waiting for instance to be terminated..."
           aws ec2 wait instance-terminated --instance-ids $INSTANCE_ID
