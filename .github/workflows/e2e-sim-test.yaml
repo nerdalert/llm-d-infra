@@ -1,6 +1,12 @@
 name: E2E Simulation Test
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - '**/*.md'
+
   workflow_dispatch:
     inputs:
       pr_or_branch:
