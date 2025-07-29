@@ -421,7 +421,6 @@ jobs:
               "kubectl apply -n \"$NS\" -f /tmp/destinationrule.yaml && rm /tmp/destinationrule.yaml"
 
       - name: Inference test
-        if: steps.pod-readiness.outcome == 'success'
         run: |
           ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@"$INSTANCE_IP" <<EOF
             set -euo pipefail
