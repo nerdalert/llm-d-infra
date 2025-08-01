@@ -87,18 +87,18 @@ The installer needs to be run from the `llm-d-infra/quickstart` directory as a c
 
 ### Flags
 
-| Flag                                 | Description                                                   | Example                                                          |
-|--------------------------------------|---------------------------------------------------------------|------------------------------------------------------------------|
-| `-n`, `--namespace NAME`             | K8s namespace (default: llm-d)                                | `./llmd-infra-installer.sh --namespace foo`                            |
-| `-f`, `--values-file PATH`           | Path to Helm values.yaml file (default: values.yaml)          | `./llmd-infra-installer.sh --values-file /path/to/values.yaml`         |
-| `-u`, `--uninstall`                  | Uninstall the llm-d components from the current cluster       | `./llmd-infra-installer.sh --uninstall`                                |
-| `-d`, `--debug`                      | Add debug mode to the helm install                            | `./llmd-infra-installer.sh --debug`                                    |
-| `-m`, `--disable-metrics-collection` | Disable metrics collection (Prometheus will not be installed) | `./llmd-infra-installer.sh --disable-metrics-collection`               |
-| `-k`, `--minikube`                   | Deploy on an existing minikube instance with hostPath storage | `./llmd-infra-installer.sh --minikube`                                 |
-| `-g`, `--context`                    | Supply a specific Kubernetes context                          | `./llmd-infra-installer.sh --context`                                  |
-| `-j`, `--gateway`                    | Select gateway type (istio, kgateway) (default: istio)        | `./llm-installer.sh --gateway kgateway`                          |
-| `-r`, `--release `                   | (Helm) Chart release name                                     | `./llmd-infra-installer.sh --release llm-d-infra`                      |
-| `-h`, `--help`                       | Show this help and exit                                       | `./llmd-infra-installer.sh --help`                                     |
+| Flag                                 | Description                                                   | Example                                                        |
+|--------------------------------------|---------------------------------------------------------------|----------------------------------------------------------------|
+| `-n`, `--namespace NAME`             | K8s namespace (default: llm-d)                                | `./llmd-infra-installer.sh --namespace foo`                    |
+| `-f`, `--values-file PATH`           | Path to Helm values.yaml file (default: values.yaml)          | `./llmd-infra-installer.sh --values-file /path/to/values.yaml` |
+| `-u`, `--uninstall`                  | Uninstall the llm-d components from the current cluster       | `./llmd-infra-installer.sh --uninstall`                        |
+| `-d`, `--debug`                      | Add debug mode to the helm install                            | `./llmd-infra-installer.sh --debug`                            |
+| `-m`, `--disable-metrics-collection` | Disable metrics collection (Prometheus will not be installed) | `./llmd-infra-installer.sh --disable-metrics-collection`       |
+| `-k`, `--minikube`                   | Deploy on an existing minikube instance with hostPath storage | `./llmd-infra-installer.sh --minikube`                         |
+| `-g`, `--context`                    | Supply a specific Kubernetes context                          | `./llmd-infra-installer.sh --context`                          |
+| `-j`, `--gateway`                    | Select gateway type (istio, kgateway) (default: istio)        | `./llm-installer.sh --gateway kgateway`                        |
+| `-r`, `--release`                    | (Helm) Chart release name                                     | `./llmd-infra-installer.sh --release llm-d-infra`              |
+| `-h`, `--help`                       | Show this help and exit                                       | `./llmd-infra-installer.sh --help`                             |
 
 ## Examples
 

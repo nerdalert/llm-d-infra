@@ -1,6 +1,6 @@
-## Temporary Istio Workaround
+# Temporary Istio Workaround
 
-### Istio TLS Connection
+## Istio TLS Connection
 
 If you are using Istio as your gateway provider, apply this temporary workaround.
 Currently, the EPP service uses the default self-signed certificates for its internal communication.
@@ -10,23 +10,23 @@ connection to the EPP service but to skip the certificate verification, allowing
 
 -----
 
-### Applying the Fix
+## Applying the Fix
 
 The following will set the required variables from your deployment and apply the `DestinationRule`.
 
-1.  Set the namespace:
+1. Set the namespace:
 
 ```bash
 export EPP_NAMESPACE="llm-d"
 ```
 
-2.  Find and set the EPP service name:
+2. Find and set the EPP service name:
 
 ```bash
 export EPP_NAME=$(kubectl get svc -n "${EPP_NAMESPACE}" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | grep -- "-epp" | head -n1)
 ```
 
-3.  Apply the `DestinationRule`:
+3. Apply the `DestinationRule`:
 
 ```bash
 cat <<EOF | kubectl apply -n "${EPP_NAMESPACE}" -f -

@@ -24,7 +24,6 @@ export HF_TOKEN=${HFTOKEN}
 
 **_NOTE:_** The release name `infra-sim` is important here, because it matches up with pre-built values files used in this example.
 
-
 3. Use the helmfile to apply the modelservice and GIE charts on top of it.
 
 ```bash

@@ -1,6 +1,6 @@
 # llm-d-infra Quick Start for OpenShift
 
-# Prerequisites
+## Prerequisites
 
 ## Platform Setup
 
@@ -9,11 +9,11 @@
 - NO Service Mesh or Istio installation as Istio CRDs will conflict with the gateway
 - Cluster administrator privileges are required to install the llm-d cluster scoped resources
 
-# llm-d-infra Installation
+## llm-d-infra Installation
 
 TBD
 
-# OpenShift and Grafana
+## OpenShift and Grafana
 
 If running on OpenShift with user workload monitoring enabled, you can access the metrics through the OpenShift console:
 

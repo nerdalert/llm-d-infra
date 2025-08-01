@@ -8,3 +8,6 @@ MD041:
   level: 1
   # RegExp for matching title in front matter
   front_matter_title: "^\\s*title\\s*[:=]"
+
+MD029: false # MD029/ol-prefix Ordered list item prefix (e.g. Style: 1/1/1)
+MD010: false # MD010/no-hard-tabs Hard tabs

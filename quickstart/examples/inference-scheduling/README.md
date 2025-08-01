@@ -45,12 +45,14 @@ ms-inference-scheduling   	llm-d-inference-scheduling	1       	2025-07-24 10:44:
 ```
 
 2. Find the gateway service:
+
 ```bash
 $ kubectl get services -n llm-d-inference-scheduling
 NAME                                           TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)             AGE
 gaie-inference-scheduling-epp                  ClusterIP   10.16.0.249   <none>        9002/TCP,9090/TCP   96s
 infra-inference-scheduling-inference-gateway   NodePort    10.16.3.58    <none>        80:33377/TCP        4m19s
 ```
+
 In this case we have found that our gateway service is called `infra-inference-scheduling-inference-gateway`.
 
 3. `port-forward` the service to we can curl it:
@@ -97,6 +99,7 @@ curl -s http://localhost:8000/v1/models \
 ```
 
 5. Try curling the `v1/completions` endpoint:
+
 ```bash
 curl -s http://localhost:8000/v1/completions \
   -H "Content-Type: application/json" \
@@ -133,6 +136,7 @@ curl -s http://localhost:8000/v1/completions \
 ## Cleanup
 
 To remove the deployment:
+
 ```bash
 # Remove the model services
 # From examples/inference-scheduling

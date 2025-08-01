@@ -8,6 +8,7 @@
 > WARNING: We are still investigating and optimizing performance for other hardware and networking configurations
 
 In this example, we will demonstrate a deployment of `DeepSeek-R1-0528` with:
+
 - 1 DP=8 Prefill Workers
 - 2 DP=4 Decode Worker
 
@@ -29,6 +30,7 @@ export HF_TOKEN=${HFTOKEN}
 **_NOTE:_** The release name `infra-wide-ep` is important here, because it matches up with pre-built values files used in this example.
 
 3. Use the helmfile to apply the modelservice chart on top of it
+
 ```bash
 cd examples/wide-ep-lws
 helmfile --selector managedBy=helmfile apply -f helmfile.yaml --skip-diff-on-install
@@ -100,13 +102,13 @@ INFO:     Application startup complete.
 After this we can port-forwarding your gateway service in one terminal:
 
 ```bash
-$ kubectl port-forward -n llm-d-wide-ep service/infra-wide-ep-inference-gateway-istio 8000:80
+kubectl port-forward -n llm-d-wide-ep service/infra-wide-ep-inference-gateway-istio 8000:80
 ```
 
 And then you should be able to curl your gateway service:
 
 ```bash
-$ curl -s http://localhost:8000/v1/models \
+curl -s http://localhost:8000/v1/models \
   -H "Content-Type: application/json" | jq
 {
   "data": [
@@ -143,7 +145,7 @@ $ curl -s http://localhost:8000/v1/models \
 Finally, we should be able to inferencing `curl`s:
 
 ```bash
-$ curl -s http://localhost:8000/v1/completions \
+curl -s http://localhost:8000/v1/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "deepseek-ai/DeepSeek-R1-0528",
@@ -182,6 +184,7 @@ $ curl -s http://localhost:8000/v1/completions \
 ## Cleanup
 
 To remove the deployment:
+
 ```bash
 # Remove the model services
 # From examples/wide-ep-lws

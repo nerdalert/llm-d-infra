@@ -8,21 +8,25 @@
 > WARNING: We are still investigating and optimizing performance for other hardware and networking configurations
 
 In this example, we will demonstrate a deployment of `Llama-3.3-70B-Instruct-Fp8` with:
+
 - 4 TP=1 Prefill Workers
 - 1 TP=4 Decode Worker
 
 ## P/D Best Practices
 
 P/D disaggregation can benefit overall throughput by:
+
 - Specializing P and D workers for compute-bound vs latency-bound workloads
 - Reducing the number of copies of the model (increasing KV cache RAM) with wide parallelism
 
 However, P/D disaggregation is not a target for all workloads. We suggest exploring P/D disaggregation for workloads with:
+
 - Large models (e.g. Llama-70B+, not Llama-8B)
 - Longer input sequence lengths (e.g 10k ISL | 1k OSL, not 200 ISL | 200 OSL)
 - Sparse MoE architectures with opportunities for wide-EP
 
 As a result, as you tune you P/D deployments, we suggest focusing on the following parameters:
+
 - **Heterogenous Parallelism**: deploy P workers with less parallelism and more replicas and D workers with more parallelism and fewer replicas
 - **xPyD Ratios**: tuning the ratio of P workers to D workers to ensure balance for your ISL|OSL ratio
 
@@ -46,6 +50,7 @@ export HF_TOKEN=$(HFTOKEN)
 **_NOTE:_** The release name `infra-pd` is important here, because it matches up with pre-built values files used in this example.
 
 3. Use the helmfile to apply the modelservice and GIE charts on top of it
+
 ```bash
 cd examples/pd-disaggregation
 helmfile --selector managedBy=helmfile apply -f helmfile.yaml --skip-diff-on-install
@@ -78,6 +83,7 @@ ms-pd-llm-d-modelservice-prefill-549598dd6c-pbjzx   1/1     Running   0         
 ```
 
 3. Find the gateway service:
+
 ```bash
 $ kubectl get services -n llm-d-pd
 NAME                               TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)                        AGE
@@ -85,6 +91,7 @@ gaie-pd-epp                        ClusterIP   10.16.0.161   <none>        9002/
 gaie-pd-ip-bb618139                ClusterIP   None          <none>        54321/TCP                      6m1s
 infra-pd-inference-gateway-istio   NodePort    10.16.0.146   <none>        15021:34743/TCP,80:30212/TCP   6m36s
 ```
+
 In this case we have found that our gateway service is called `infra-pd-inference-gateway-istio`.
 
 4. `port-forward` the service to we can curl it:
@@ -131,6 +138,7 @@ curl -s http://localhost:8000/v1/models \
 ```
 
 6. Try curling the `v1/completions` endpoint:
+
 ```bash
 curl -s http://localhost:8000/v1/completions \
   -H "Content-Type: application/json" \
@@ -169,6 +177,7 @@ curl -s http://localhost:8000/v1/completions \
 ## Cleanup
 
 To remove the deployment:
+
 ```bash
 # Remove the model services
 # From examples/inference-scheduling

@@ -98,6 +98,7 @@ curl -s http://localhost:8000/v1/models \
 ```
 
 5. Curl the `v1/completions` endpoint once:
+
 ```bash
 export LONG_TEXT_200_WORDS="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum." && \
 curl -s http://localhost:8000/v1/completions \
@@ -135,11 +136,13 @@ curl -s http://localhost:8000/v1/completions \
 ```
 
 6. Check the inference-scheduler's prefix-cache-scorer's scores with the following command:
+
 ```bash
 kubectl logs -l inferencepool=gaie-kv-events-epp -n llm-d-precise --tail 100 | grep "Got pod scores"
 ```
 
 You should see output similar to:
+
 ```bash
 2025-07-18T22:00:24Z    LEVEL(-4)       prefix-cache-scorer/prefix-cache-scorer scorer/prefix_cache_tracking.go:133     Got pod scores  {"x-request-id": "0e08703d-30c0-4624-a7b3-31e94dc99bc8", "model": "Qwen/Qwen3-0.6B", "resolvedTargetModel": "Qwen/Qwen3-0.6B", "criticality": "Sheddable", "scores": null}
 ```
@@ -147,6 +150,7 @@ You should see output similar to:
 7. Repeat steps 5 and 6 to see the prefix-cache-scorer in action
 
 You should see output similar to:
+
 ```log
 2025-07-18T22:00:24Z    LEVEL(-4)       prefix-cache-scorer/prefix-cache-scorer scorer/prefix_cache_tracking.go:133     Got pod scores  {"x-request-id": "0e08703d-30c0-4624-a7b3-31e94dc99bc8", "model": "Qwen/Qwen3-0.6B", "resolvedTargetModel": "Qwen/Qwen3-0.6B", "criticality": "Sheddable", "scores": null}
 2025-07-18T22:00:46Z    LEVEL(-4)       prefix-cache-scorer/prefix-cache-scorer scorer/prefix_cache_tracking.go:133     Got pod scores  {"x-request-id": "8d0b587d-058f-4d2e-a062-a859a565d37a", "model": "Qwen/Qwen3-0.6B", "resolvedTargetModel": "Qwen/Qwen3-0.6B", "criticality": "Sheddable", "scores": {"${POD_IP}":2}}
@@ -156,10 +160,13 @@ Notice that the second time we called the `/v1/completions` endpoint, the prefix
 indicating that it had cached the KV-blocks from the first call.
 
 8. See the `kvblock.Index` metrics in the `gaie-kv-events-epp` pod:
+
 ```bash
 kubectl logs -l inferencepool=gaie-kv-events-epp -n llm-d-precise --tail 100 | grep "metrics beat"
 ```
+
 You should see output similar to:
+
 ```log
 I0718 23:57:10.781371       1 collector.go:107] "metrics beat" logger="metrics" admissions=3 evictions=0 lookups=1 hits=2 latency_count=1 latency_sum=0.000006859 latency_avg=0.0000022863333333333334
 ```
@@ -172,6 +179,7 @@ If the beat is missing lookups, wait for the next one (1 minute beats).
 ## Cleanup
 
 To remove the deployment:
+
 ```bash
 # Remove the model services
 # From examples/precise-prefix-cache-aware

@@ -211,7 +211,6 @@ helm upgrade -i llm-d-infra . --namespace "${NAMESPACE}" \
   --set gateway.serviceType=LoadBalancer
 ```
 
-
 ## Validation
 
 llm-d-infra resources are created as below.

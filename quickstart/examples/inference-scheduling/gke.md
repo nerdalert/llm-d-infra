@@ -1,5 +1,4 @@
-
-## Installation
+# GKE Intelligent Inference Scheduling Installation
 
 1. Install the dependencies; see [install-deps.sh](../../install-deps.sh)
 2. Use the quickstart to deploy Gateway CRDs + Gateway provider + Infra chart.
@@ -87,6 +86,7 @@ curl http://${IP}:${PORT}/v1/models \
 ```
 
 1. Try curling the `v1/completions` endpoint:
+
 ```bash
 curl http://${IP}:${PORT}/v1/completions \
   -H "Content-Type: application/json" \
@@ -123,6 +123,7 @@ curl http://${IP}:${PORT}/v1/completions \
 ## Cleanup
 
 To remove the deployment:
+
 ```bash
 # Remove the model services
 # From examples/inference-scheduling
